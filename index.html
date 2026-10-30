@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="RollerKey">
+<meta name="theme-color" content="#000000">
+<title>RollerKey</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{--bg:#000;--card:#040b06;--line:#0e3d22;--txt:#4dff92;--dim:#2b8555;--acc:#00ff6a;--warn:#ffd400;--bad:#ff4d4d;--sb:env(safe-area-inset-bottom,0px)}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--txt);font:17px/1.5 ui-monospace,Menlo,monospace;display:flex;flex-direction:column;overflow:hidden}
+  header{padding:calc(env(safe-area-inset-top,0px) + 16px) 18px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+  h1{font-size:19px;margin:0;letter-spacing:2px;color:var(--acc)}
+  .led{width:10px;height:10px;border-radius:50%;background:#3a1010;display:inline-block;margin-right:8px}
+  .led.on{background:var(--acc);box-shadow:0 0 12px var(--acc)}
+  main{flex:1;overflow-y:auto;padding:16px 16px calc(40px + var(--sb))}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+  .big{font-size:20px;font-weight:700;padding:22px;border-radius:16px;border:2px solid var(--acc);background:var(--acc);color:#001b0b;width:100%;font-family:inherit;letter-spacing:1px;margin-bottom:10px}
+  .big:disabled{opacity:.3}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .s{font-size:14px;padding:15px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--acc);font-family:inherit;font-weight:700}
+  .s:disabled{opacity:.28}
+  .s.red{color:var(--bad);border-color:#4d1414}
+  .stat{font-size:14px;font-weight:700;padding:12px;border-radius:12px;border:1px solid var(--line);margin-bottom:12px;color:var(--dim)}
+  .stat.ok{color:var(--acc);border-color:#0e5c33;background:#00170c}
+  .stat.warn{color:var(--warn);border-color:#5c4a0e;background:#171200}
+  .stat.bad{color:var(--bad);border-color:#5c1414;background:#170000}
+  .wrap{position:relative;border-radius:14px;overflow:hidden;background:#000;aspect-ratio:3/4;margin-bottom:12px;border:1px solid var(--line);display:none}
+  .wrap.on{display:block}
+  video{width:100%;height:100%;object-fit:cover;display:block}
+  .wrap::after{content:"";position:absolute;inset:15% 10%;border:2px solid var(--acc);border-radius:16px;pointer-events:none}
+  .t{font-size:38px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--acc);letter-spacing:-1px}
+  pre{background:#000;border:1px solid var(--line);border-radius:10px;padding:11px;font-size:11px;overflow:auto;max-height:170px;color:var(--dim);white-space:pre-wrap}
+  details{border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--card);margin-bottom:12px}
+  summary{cursor:pointer;font-size:12px;letter-spacing:1.2px;color:var(--dim);text-transform:uppercase}
+  details[open] summary{margin-bottom:12px;color:var(--acc)}
+  input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#000;color:var(--txt);font:inherit;font-size:14px;margin-bottom:8px}
+  .lbl{font-size:11px;color:var(--dim);display:block;margin:6px 0 4px}
+  p{margin:0 0 10px;color:var(--dim);font-size:13px}
+</style>
+</head>
+<body>
+<header><h1>ROLLERKEY</h1><span><span class="led" id="led"></span><span style="font-size:12px;color:var(--dim)" id="state">BEREIT</span></span></header>
+
+<main>
+  <div id="status" class="stat">Drück den Knopf, dann scan den QR-Code.</div>
+  <div class="wrap" id="camBox"><video id="vid" playsinline muted autoplay></video></div>
+  <button class="big" id="go">VERBINDEN &amp; SCANNEN</button>
+
+  <div class="card">
+    <div class="grid">
+      <button class="s" id="again" disabled>Nochmal entsperren</button>
+      <button class="s red" id="lock" disabled>Sperren</button>
+      <button class="s" id="lon" disabled>Licht an</button>
+      <button class="s" id="loff" disabled>Licht aus</button>
+    </div>
+  </div>
+
+  <div class="card"><div class="t" id="timer">00:00</div></div>
+
+  <details>
+    <summary>Konsole</summary>
+    <pre id="log">bereit.</pre>
+  </details>
+
+  <details>
+    <summary>Erweitert</summary>
+    <p>Nur nötig, wenn der Roller gar nicht reagiert.</p>
+    <label class="lbl">Proxy-URL</label>
+    <input id="proxy" placeholder="https://proxy.dein-name.workers.dev">
+    <button class="s" id="auto" style="width:100%;margin-bottom:8px">Konto automatisch anlegen</button>
+    <label class="lbl">Pause zwischen Befehlen (ms)</label>
+    <input id="delay" inputmode="numeric">
+    <button class="s" id="save" style="width:100%">Speichern</button>
+    <pre id="accLog" style="margin-top:10px">–</pre>
+  </details>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const get=(k,d)=>localStorage.getItem("sf_"+k)??d;
+const set=(k,v)=>localStorage.setItem("sf_"+k,v);
+const err=e=>(e&&(e.message||e.name))||"unbekannt";
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const uuid=()=>crypto.randomUUID();
+
+const CANDS=[0xffe0,0xffe1,0xfff0,0xff00,0xffb0,0xffe5,0xfe59,0xffa0,0xfff1,0xfff2];
+const U=n=>"0000"+n.toString(16).padStart(4,"0")+"-0000-1000-8000-00805f9b34fb";
+const VOCAB=["WS","US","KS","L1","L0","UN","UL","U1","RS","ST","ON","1","2","A","E"];
+const FRAMES=[c=>c,c=>c+"\r",c=>c+"\n",c=>c+"\r\n",c=>"*"+c+"#"];
+const SEQ="WS,US,KS";
+
+let dev=null,chans=[],ci=0,stream=null,raf=null,tick=null,t0=null,busy=false,acks=0,last="",lastT=0,ride=null;
+const vid=$("#vid"),cv=document.createElement("canvas"),ctx=cv.getContext("2d",{willReadFrequently:true});
+const log=t=>{const p=$("#log");p.textContent+="\n["+new Date().toLocaleTimeString("de-DE",{hour12:false})+"] "+t;p.scrollTop=p.scrollHeight};
+const stat=(t,c)=>{const s=$("#status");s.textContent=t;s.className="stat "+(c||"")};
+const DLY=()=>Math.max(150,parseInt(get("delay","700"),10)||700);
+
+function ui(){
+  const on=chans.length>0;
+  $("#state").textContent=ride?"FAHRT":(on?"VERBUNDEN":"BEREIT");
+  $("#led").classList.toggle("on",on||!!ride);
+  ["#again","#lock","#lon","#loff"].forEach(s=>$(s).disabled=!on||busy);
+  $("#go").disabled=busy;
+}
+
+async function api(url,opt={}){
+  const p=get("proxy","");
+  if(!p) throw new Error("Proxy-URL fehlt");
+  const r=await fetch(p+"?u="+encodeURIComponent(url),{
+    method:opt.method||"GET",headers:opt.headers||{},
+    body:opt.body?JSON.stringify(opt.body):undefined});
+  const t=await r.text();let j;try{j=JSON.parse(t)}catch(_){j=t}
+  return {status:r.status,data:j};
+}
+
+/* ---- Verbinden ---- */
+$("#go").onclick=async()=>{
+  if(chans.length){ startCam(); return }
+  if(!navigator.bluetooth) return stat("Kein Bluetooth. Bluefy nutzen.","bad");
+  try{ dev=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:CANDS.map(U)}) }
+  catch(e){ stat("Abgebrochen: "+err(e),"bad"); log("Suche: "+err(e)); return }
+  stat("Verbinde …","warn");
+  try{
+    dev.addEventListener("gattserverdisconnected",()=>{chans=[];ui();stat("Verbindung weg.","bad")});
+    const srv=await dev.gatt.connect();
+    chans=[];
+    for(const s of CANDS.map(U)){
+      try{ (await (await srv.getPrimaryService(s)).getCharacteristics()).forEach(c=>{
+        if(c.properties.write||c.properties.writeWithoutResponse) chans.push(c);
+      }) }catch(_){}
+    }
+    if(!chans.length){ stat("Roller nimmt keine Befehle an.","bad"); return }
+    ci=0;
+    for(const c of chans){
+      if(!c.properties.notify) continue;
+      try{
+        await c.startNotifications();
+        c.addEventListener("characteristicvaluechanged",e=>{acks++;log("← "+new TextDecoder().decode(e.target.value))});
+      }catch(_){}
+    }
+    ui(); stat("Verbunden. Jetzt QR scannen.","ok"); startCam();
+  }catch(e){ stat("Fehler: "+err(e),"bad"); log("Connect: "+err(e)) }
+};
+
+/* ---- Senden ---- */
+async function send(cmd,frameFn){
+  const c=chans[ci]; if(!c) return;
+  const raw=frameFn?frameFn(cmd):cmd;
+  try{
+    const d=new TextEncoder().encode(raw);
+    if(c.properties.writeWithoutResponse) await c.writeValueWithoutResponse(d);
+    else await c.writeValue(d);
+    log("→ "+JSON.stringify(raw));
+  }catch(e){ log("Senden: "+err(e)) }
+}
+async function runSeq(seq,frameFn,pause){
+  for(const c of seq.split(",")){ const v=c.trim(); if(!v)continue; await send(v,frameFn); await wait(pause); if(acks) return true }
+  return false;
+}
+
+/* ---- Entsperren ---- */
+async function unlock(hard){
+  if(busy||!chans.length) return;
+  busy=true; ui(); acks=0;
+  for(let r=1;r<4;r++){ stat("Entsperre "+r+"/3 …","warn"); if(await runSeq(SEQ,c=>c,DLY())) return done(); await wait(1000) }
+  for(let f=1;f<FRAMES.length;f++){
+    stat("Variante "+f+"/4 …","warn");
+    if(await runSeq(SEQ,FRAMES[f],DLY())) return done();
+    await wait(600);
+    if(!acks&&chans.length>1){ ci=(ci+1)%chans.length; log("Kanal → "+chans[ci].uuid.slice(4,8)) }
+  }
+  if(hard){ for(const c of VOCAB){ await send(c,x=>x); await wait(850); if(acks) return done() } }
+  busy=false; ui(); ride={}; startTimer(); stat("Befehle raus. Piept er? Sonst „Nochmal entsperren“.","warn");
+}
+function done(){ busy=false; ui(); ride={}; startTimer(); stat("Roller bestätigt. Kickstart!","ok") }
+
+$("#again").onclick=()=>unlock(true);
+$("#lock").onclick=async()=>{ busy=true;ui(); await runSeq("KS,L0",c=>c,300); await send("L0",c=>c); busy=false;ui(); stat("Gesperrt.") };
+$("#lon").onclick=()=>send("L1",c=>c);
+$("#loff").onclick=()=>send("L0",c=>c);
+
+/* ---- Kamera ---- */
+async function startCam(){
+  if(stream) return;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280}},audio:false});
+    vid.srcObject=stream; await vid.play(); $("#camBox").classList.add("on"); raf=requestAnimationFrame(scan);
+  }catch(e){ stat("Kamera: "+err(e),"bad") }
+}
+function stopCam(){ if(raf)cancelAnimationFrame(raf),raf=null; if(stream){stream.getTracks().forEach(t=>t.stop());stream=null} $("#camBox").classList.remove("on") }
+function scan(){
+  if(!stream) return;
+  if(vid.readyState===4){
+    cv.width=vid.videoWidth; cv.height=vid.videoHeight;
+    ctx.drawImage(vid,0,0,cv.width,cv.height);
+    const d=ctx.getImageData(0,0,cv.width,cv.height);
+    const r=window.jsQR?jsQR(d.data,d.width,d.height,{inversionAttempts:"dontInvert"}):null;
+    if(r&&r.data){
+      const n=Date.now();
+      if(r.data===last&&n-lastT<3000){ raf=requestAnimationFrame(scan); return }
+      last=r.data; lastT=n; stopCam(); log("QR: "+r.data); unlock(false); return;
+    }
+  }
+  raf=requestAnimationFrame(scan);
+}
+
+/* ---- Timer ---- */
+function startTimer(){
+  clearInterval(tick); t0=Date.now();
+  tick=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);
+    $("#timer").textContent=String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0")},1000);
+}
+
+/* ---- Erweitert ---- */
+$("#proxy").value=get("proxy",""); $("#delay").value=DLY();
+$("#save").onclick=()=>{ set("proxy",$("#proxy").value.trim()); set("delay",$("#delay").value); $("#save").textContent="Gespeichert ✓" };
+
+$("#auto").onclick=async()=>{
+  const L=$("#accLog");
+  try{
+    L.textContent="Adresse holen …";
+    const r=await api("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1");
+    const addr=r.data[0]; L.textContent+="\n"+addr;
+    await api("https://web-production.lime.bike/api/rider/v2/onboarding/magic-link",{
+      method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},
+      body:{email:addr,user_agreement_country_code:"DE",user_agreement_version:4}});
+    L.textContent+="\nPostfach abfragen …";
+    const [login,domain]=addr.split("@");
+    let link=null;
+    for(let i=0;i<20&&!link;i++){
+      await wait(3000);
+      const m=await api(`https://www.1secmail.com/api/v1/?action=getMessages&login=${login}&domain=${domain}`);
+      if(!Array.isArray(m.data)||!m.data.length) continue;
+      const t=await api(`https://www.1secmail.com/api/v1/?action=readMessage&login=${login}&domain=${domain}&id=${m.data[0].id}`);
+      const b=(t.data&&(t.data.body||t.data.textBody))||"";
+      const h=b.match(/https?:\/\/[^\s"'<>]*token=[^\s"'<>]*/);
+      if(h) link=h[0];
+    }
+    if(!link){ L.textContent+="\nkeine Mail erhalten"; return }
+    const tok=decodeURIComponent((link.match(/[?&]token=([^&\s]+)/)||[])[1]||link);
+    const d=get("dev","")||uuid(); set("dev",d);
+    const l=await api("https://web-production.lime.bike/api/rider/v2/onboarding/login",{
+      method:"POST",headers:{"content-type":"application/x-www-form-urlencoded","x-device-token":d},
+      body:{magic_link_token:tok}});
+    const tk=l.data&&(l.data.token||(l.data.data&&l.data.data.token));
+    L.textContent+=tk?"\nKonto aktiv.":"\nfehlgeschlagen: "+JSON.stringify(l.data).slice(0,150);
+  }catch(e){ L.textContent+="\n"+err(e) }
+};
+
+ui();
+if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
+</script>
+</body>
+</html>
